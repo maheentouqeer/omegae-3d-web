@@ -1,0 +1,6 @@
+{
+  "name": "Omega 3D Supermarket & Store Management",
+  "description": "An interactive first-person 3D walk-in supermarket with aisle navigation, instanced products, physics add-to-cart, conveyor checkout, live inventory manager mode, and Gemini AI assistants.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
