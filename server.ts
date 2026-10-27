@@ -1,4 +1,5 @@
 import express from 'express';
+import http from 'http';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -135,6 +136,8 @@ Return JSON matching this schema:
   }
 });
 
+const httpServer = http.createServer(app);
+
 // Mount Vite or serve static dist
 if (process.env.NODE_ENV === 'production') {
   app.use(express.static(path.join(__dirname, 'dist')));
@@ -143,13 +146,17 @@ if (process.env.NODE_ENV === 'production') {
   });
 } else {
   const { createServer } = await import('vite');
+  const isHmrDisabled = process.env.DISABLE_HMR === 'true';
   const vite = await createServer({
-    server: { middlewareMode: true },
+    server: {
+      middlewareMode: true,
+      hmr: isHmrDisabled ? false : { server: httpServer },
+    },
     appType: 'spa',
   });
   app.use(vite.middlewares);
 }
 
-app.listen(port, '0.0.0.0', () => {
+httpServer.listen(port, '0.0.0.0', () => {
   console.log(`Omega 3D Supermarket running at http://0.0.0.0:${port}`);
 });

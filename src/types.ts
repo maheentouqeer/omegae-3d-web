@@ -8,12 +8,20 @@ export type ProductCategory =
   | 'home'
   | 'kids';
 
-export type PackageType = 'box' | 'bottle' | 'can' | 'bag';
+export type PackageType =
+  | 'box'
+  | 'bottle'
+  | 'can'
+  | 'tube'
+  | 'bag'
+  | 'jar'
+  | 'folded_clothes';
 
 export interface Product {
   id: string;
   sku: string;
   name: string;
+  brandName: string;
   category: ProductCategory;
   price: number;
   description: string;
@@ -26,13 +34,14 @@ export interface Product {
   caloriesOrSpec?: string;
   isSale?: boolean;
   salePrice?: number;
+  rating?: number;
 }
 
 export interface ShelfSlot {
   id: string;
   aisleNumber: number;
-  shelfLevel: number; // 0: bottom, 1: middle, 2: top
-  positionIndex: number; // position along the aisle shelf
+  shelfLevel: number; // 0 (bottom: 0.35m) to 4 (top: 1.95m)
+  positionIndex: number;
   x: number;
   y: number;
   z: number;
@@ -69,13 +78,23 @@ export interface AuditEntry {
 
 export type ViewMode = '3d' | 'list';
 export type AppMode = 'shopper' | 'manager';
+export type QualityLevel = 'low' | 'medium' | 'high';
 
 export interface AisleInfo {
   number: number;
   name: string;
+  subLabel: string;
   category: ProductCategory;
   signTitle: string;
-  color: string;
+  accentColor: string;
   x: number;
   z: number;
+}
+
+export interface CartToast {
+  id: string;
+  message: string;
+  productId?: string;
+  quantity?: number;
+  slotId?: string;
 }

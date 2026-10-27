@@ -1,12 +1,21 @@
 class AudioManager {
   private ctx: AudioContext | null = null;
-  private isMuted: boolean = false;
+  private isMuted: boolean = true; // Off by default as specified in prompt
+  private masterVolume: number = 0.5; // 50% default
+  private masterGain: GainNode | null = null;
+  private ambientGain: GainNode | null = null;
+  private ambientOsc1: OscillatorNode | null = null;
+  private ambientOsc2: OscillatorNode | null = null;
+  private isAmbientRunning: boolean = false;
 
   private initCtx() {
     if (!this.ctx && typeof window !== 'undefined') {
       const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
       if (AudioCtx) {
         this.ctx = new AudioCtx();
+        this.masterGain = this.ctx.createGain();
+        this.masterGain.gain.setValueAtTime(this.isMuted ? 0 : this.masterVolume, this.ctx.currentTime);
+        this.masterGain.connect(this.ctx.destination);
       }
     }
     if (this.ctx && this.ctx.state === 'suspended') {
@@ -16,49 +25,119 @@ class AudioManager {
 
   public setMuted(muted: boolean) {
     this.isMuted = muted;
+    this.initCtx();
+    if (this.masterGain && this.ctx) {
+      this.masterGain.gain.setValueAtTime(muted ? 0 : this.masterVolume, this.ctx.currentTime);
+    }
+    if (muted) {
+      this.stopAmbientHum();
+    } else {
+      this.startAmbientHum();
+    }
   }
 
   public getMuted(): boolean {
     return this.isMuted;
   }
 
-  // Soft low-frequency step thump
+  public setVolume(volume: number) {
+    this.masterVolume = Math.max(0, Math.min(1, volume));
+    if (this.masterGain && this.ctx && !this.isMuted) {
+      this.masterGain.gain.setValueAtTime(this.masterVolume, this.ctx.currentTime);
+    }
+  }
+
+  public getVolume(): number {
+    return this.masterVolume;
+  }
+
+  // Soft supermarket ambient HVAC / lighting hum
+  public startAmbientHum() {
+    if (this.isMuted || this.isAmbientRunning) return;
+    try {
+      this.initCtx();
+      if (!this.ctx || !this.masterGain) return;
+
+      this.ambientGain = this.ctx.createGain();
+      this.ambientGain.gain.setValueAtTime(0.015, this.ctx.currentTime);
+
+      const filter = this.ctx.createBiquadFilter();
+      filter.type = 'lowpass';
+      filter.frequency.setValueAtTime(110, this.ctx.currentTime);
+
+      this.ambientOsc1 = this.ctx.createOscillator();
+      this.ambientOsc1.type = 'sine';
+      this.ambientOsc1.frequency.setValueAtTime(58, this.ctx.currentTime);
+
+      this.ambientOsc2 = this.ctx.createOscillator();
+      this.ambientOsc2.type = 'triangle';
+      this.ambientOsc2.frequency.setValueAtTime(116, this.ctx.currentTime);
+
+      this.ambientOsc1.connect(filter);
+      this.ambientOsc2.connect(filter);
+      filter.connect(this.ambientGain);
+      this.ambientGain.connect(this.masterGain);
+
+      this.ambientOsc1.start();
+      this.ambientOsc2.start();
+      this.isAmbientRunning = true;
+    } catch {}
+  }
+
+  public stopAmbientHum() {
+    if (!this.isAmbientRunning) return;
+    try {
+      if (this.ambientOsc1) {
+        this.ambientOsc1.stop();
+        this.ambientOsc1.disconnect();
+        this.ambientOsc1 = null;
+      }
+      if (this.ambientOsc2) {
+        this.ambientOsc2.stop();
+        this.ambientOsc2.disconnect();
+        this.ambientOsc2 = null;
+      }
+      this.isAmbientRunning = false;
+    } catch {}
+  }
+
+  // Footstep sound: muted low thump
   public playFootstep() {
     if (this.isMuted) return;
     try {
       this.initCtx();
-      if (!this.ctx) return;
+      if (!this.ctx || !this.masterGain) return;
+
       const osc = this.ctx.createOscillator();
       const gain = this.ctx.createGain();
       const filter = this.ctx.createBiquadFilter();
 
       filter.type = 'lowpass';
-      filter.frequency.setValueAtTime(140, this.ctx.currentTime);
+      filter.frequency.setValueAtTime(130, this.ctx.currentTime);
 
       osc.type = 'triangle';
-      osc.frequency.setValueAtTime(60 + Math.random() * 20, this.ctx.currentTime);
-      osc.frequency.exponentialRampToValueAtTime(30, this.ctx.currentTime + 0.08);
+      osc.frequency.setValueAtTime(55 + Math.random() * 15, this.ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(25, this.ctx.currentTime + 0.08);
 
-      gain.gain.setValueAtTime(0.06, this.ctx.currentTime);
+      gain.gain.setValueAtTime(0.08, this.ctx.currentTime);
       gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.08);
 
       osc.connect(filter);
       filter.connect(gain);
-      gain.connect(this.ctx.destination);
+      gain.connect(this.masterGain);
 
       osc.start();
       osc.stop(this.ctx.currentTime + 0.09);
-    } catch {
-      // AudioContext policy catch
-    }
+    } catch {}
   }
 
-  // Crisp supermarket scanner beep
+  // Barcode scan beep
   public playScanBeep() {
     if (this.isMuted) return;
     try {
       this.initCtx();
-      if (!this.ctx) return;
+      if (!this.ctx || !this.masterGain) return;
+
       const osc = this.ctx.createOscillator();
       const gain = this.ctx.createGain();
 
@@ -66,48 +145,51 @@ class AudioManager {
       osc.frequency.setValueAtTime(1850, this.ctx.currentTime);
       osc.frequency.setValueAtTime(2200, this.ctx.currentTime + 0.04);
 
-      gain.gain.setValueAtTime(0.12, this.ctx.currentTime);
+      gain.gain.setValueAtTime(0.14, this.ctx.currentTime);
       gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.12);
 
       osc.connect(gain);
-      gain.connect(this.ctx.destination);
+      gain.connect(this.masterGain);
 
       osc.start();
-      osc.stop(this.ctx.currentTime + 0.12);
+      osc.stop(this.ctx.currentTime + 0.13);
     } catch {}
   }
 
-  // Swoosh sound when product flies into cart
-  public playAddToCart() {
+  // Add-to-cart organic "pop" sound
+  public playAddToCartPop() {
     if (this.isMuted) return;
     try {
       this.initCtx();
-      if (!this.ctx) return;
+      if (!this.ctx || !this.masterGain) return;
+
       const osc = this.ctx.createOscillator();
       const gain = this.ctx.createGain();
 
       osc.type = 'sine';
-      osc.frequency.setValueAtTime(320, this.ctx.currentTime);
-      osc.frequency.exponentialRampToValueAtTime(880, this.ctx.currentTime + 0.18);
+      osc.frequency.setValueAtTime(450, this.ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(920, this.ctx.currentTime + 0.07);
+      osc.frequency.exponentialRampToValueAtTime(600, this.ctx.currentTime + 0.14);
 
-      gain.gain.setValueAtTime(0.08, this.ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.22);
+      gain.gain.setValueAtTime(0.12, this.ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.16);
 
       osc.connect(gain);
-      gain.connect(this.ctx.destination);
+      gain.connect(this.masterGain);
 
       osc.start();
-      osc.stop(this.ctx.currentTime + 0.22);
+      osc.stop(this.ctx.currentTime + 0.17);
     } catch {}
   }
 
-  // Sliding door pneumatic whoosh
+  // Sliding glass door whoosh
   public playDoorWhoosh() {
     if (this.isMuted) return;
     try {
       this.initCtx();
-      if (!this.ctx) return;
-      const bufferSize = this.ctx.sampleRate * 0.4;
+      if (!this.ctx || !this.masterGain) return;
+
+      const bufferSize = this.ctx.sampleRate * 0.45;
       const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
       const data = buffer.getChannelData(0);
       for (let i = 0; i < bufferSize; i++) {
@@ -119,29 +201,30 @@ class AudioManager {
 
       const filter = this.ctx.createBiquadFilter();
       filter.type = 'bandpass';
-      filter.frequency.setValueAtTime(400, this.ctx.currentTime);
-      filter.frequency.linearRampToValueAtTime(800, this.ctx.currentTime + 0.2);
-      filter.frequency.linearRampToValueAtTime(300, this.ctx.currentTime + 0.4);
+      filter.frequency.setValueAtTime(350, this.ctx.currentTime);
+      filter.frequency.linearRampToValueAtTime(750, this.ctx.currentTime + 0.22);
+      filter.frequency.linearRampToValueAtTime(280, this.ctx.currentTime + 0.45);
 
       const gain = this.ctx.createGain();
-      gain.gain.setValueAtTime(0.05, this.ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.4);
+      gain.gain.setValueAtTime(0.06, this.ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.45);
 
       noise.connect(filter);
       filter.connect(gain);
-      gain.connect(this.ctx.destination);
+      gain.connect(this.masterGain);
 
       noise.start();
     } catch {}
   }
 
-  // Payment completed chime
+  // Payment success fanfare
   public playPaymentSuccess() {
     if (this.isMuted) return;
     try {
       this.initCtx();
-      if (!this.ctx) return;
-      const notes = [523.25, 659.25, 783.99, 1046.5]; // C E G C
+      if (!this.ctx || !this.masterGain) return;
+
+      const notes = [523.25, 659.25, 783.99, 1046.5]; // C5, E5, G5, C6
       notes.forEach((freq, idx) => {
         const osc = this.ctx!.createOscillator();
         const gain = this.ctx!.createGain();
@@ -149,14 +232,14 @@ class AudioManager {
         osc.type = 'triangle';
         osc.frequency.setValueAtTime(freq, this.ctx!.currentTime + idx * 0.08);
 
-        gain.gain.setValueAtTime(0.1, this.ctx!.currentTime + idx * 0.08);
-        gain.gain.exponentialRampToValueAtTime(0.001, this.ctx!.currentTime + idx * 0.08 + 0.35);
+        gain.gain.setValueAtTime(0.12, this.ctx!.currentTime + idx * 0.08);
+        gain.gain.exponentialRampToValueAtTime(0.001, this.ctx!.currentTime + idx * 0.08 + 0.38);
 
         osc.connect(gain);
-        gain.connect(this.ctx!.destination);
+        gain.connect(this.masterGain!);
 
         osc.start(this.ctx!.currentTime + idx * 0.08);
-        osc.stop(this.ctx!.currentTime + idx * 0.08 + 0.36);
+        osc.stop(this.ctx!.currentTime + idx * 0.08 + 0.4);
       });
     } catch {}
   }

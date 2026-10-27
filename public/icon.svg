@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="omegaGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#7B5EFF"/>
+      <stop offset="100%" stop-color="#5B3DF5"/>
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#5B3DF5" flood-opacity="0.4"/>
+    </filter>
+  </defs>
+  <!-- Background -->
+  <rect width="512" height="512" rx="112" fill="#101A3A"/>
+  <!-- Decorative border ring -->
+  <rect x="24" y="24" width="464" height="464" rx="88" fill="none" stroke="#1E2B58" stroke-width="6"/>
+  <!-- Glowing central shield -->
+  <circle cx="256" cy="256" r="160" fill="url(#omegaGrad)" filter="url(#shadow)"/>
+  <!-- Omega Glyph in White -->
+  <path d="M 180 340 L 220 340 C 215 315, 195 285, 195 235 C 195 190, 222 165, 256 165 C 290 165, 317 190, 317 235 C 317 285, 297 315, 292 340 L 332 340 C 342 340, 348 348, 348 356 C 348 364, 342 372, 332 372 L 270 372 C 265 372, 260 365, 262 355 C 267 330, 280 295, 283 235 C 283 205, 272 195, 256 195 C 240 195, 229 205, 229 235 C 232 295, 245 330, 250 355 C 252 365, 247 372, 242 372 L 180 372 C 170 372, 164 364, 164 356 C 164 348, 170 340, 180 340 Z" fill="#FFFFFF"/>
+  <!-- Mint Accent Dot (Success/Fresh) -->
+  <circle cx="350" cy="175" r="18" fill="#19C39A"/>
+</svg>
