@@ -4,26 +4,65 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <script>
-      // Environment constraint: HMR is disabled. Ignore Vite WebSocket errors in Cloud Run/iFrame proxy.
-      window.addEventListener('error', function(e) {
-        if (e && (
-          (e.message && (e.message.indexOf('WebSocket') !== -1 || e.message.indexOf('ws:') !== -1 || e.message.indexOf('wss:') !== -1)) ||
-          (e.filename && e.filename.indexOf('@vite/client') !== -1)
-        )) {
-          e.stopImmediatePropagation();
-          e.preventDefault();
-          return true;
+      // Environment constraint: HMR is disabled in AI Studio. Ignore and prevent Vite WebSocket errors.
+      (function() {
+        if (typeof window !== 'undefined' && window.WebSocket) {
+          var OrigWebSocket = window.WebSocket;
+          window.WebSocket = function(url, protocols) {
+            var ws = new OrigWebSocket(url, protocols);
+            var isVite = (protocols === 'vite-hmr') ||
+                         (Array.isArray(protocols) && protocols.indexOf('vite-hmr') !== -1) ||
+                         (typeof url === 'string' && (url.indexOf('vite-hmr') !== -1 || url.indexOf('24678') !== -1));
+            if (isVite) {
+              var origAdd = ws.addEventListener.bind(ws);
+              ws.addEventListener = function(type, listener, options) {
+                if (type === 'close') {
+                  var safeCloseListener = function(event) {
+                    try {
+                      // Set wasClean to true so Vite's client never throws 'WebSocket closed without opened.'
+                      Object.defineProperty(event, 'wasClean', { value: true, configurable: true });
+                      return listener.call(this, event);
+                    } catch (_) {
+                      return;
+                    }
+                  };
+                  return origAdd(type, safeCloseListener, options);
+                }
+                return origAdd(type, listener, options);
+              };
+            }
+            return ws;
+          };
+          window.WebSocket.prototype = OrigWebSocket.prototype;
         }
-      }, true);
-      window.addEventListener('unhandledrejection', function(e) {
-        var reason = e.reason;
-        var msg = typeof reason === 'string' ? reason : (reason && reason.message ? reason.message : '');
-        if (msg.indexOf('WebSocket') !== -1 || msg.indexOf('ws:') !== -1 || msg.indexOf('wss:') !== -1) {
-          e.stopImmediatePropagation();
-          e.preventDefault();
-          return true;
-        }
-      }, true);
+
+        window.onerror = function(msg) {
+          if (typeof msg === 'string' && (msg.indexOf('WebSocket') !== -1 || msg.indexOf('ws:') !== -1 || msg.indexOf('wss:') !== -1)) {
+            return true;
+          }
+        };
+
+        window.addEventListener('error', function(e) {
+          if (e && (
+            (e.message && (e.message.indexOf('WebSocket') !== -1 || e.message.indexOf('ws:') !== -1 || e.message.indexOf('wss:') !== -1)) ||
+            (e.filename && e.filename.indexOf('@vite/client') !== -1)
+          )) {
+            e.stopImmediatePropagation();
+            e.preventDefault();
+            return true;
+          }
+        }, true);
+
+        window.addEventListener('unhandledrejection', function(e) {
+          var reason = e.reason;
+          var msg = typeof reason === 'string' ? reason : (reason && reason.message ? reason.message : '');
+          if (msg.indexOf('WebSocket') !== -1 || msg.indexOf('ws:') !== -1 || msg.indexOf('wss:') !== -1) {
+            e.stopImmediatePropagation();
+            e.preventDefault();
+            return true;
+          }
+        }, true);
+      })();
     </script>
     <title>Omega 3D Supermarket &amp; Store Management</title>
     <meta name="description" content="An interactive first-person 3D walk-in supermarket with aisle navigation, instanced products, physics add-to-cart, conveyor checkout, live inventory manager mode, and Gemini AI assistants." />

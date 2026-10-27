@@ -146,11 +146,10 @@ if (process.env.NODE_ENV === 'production') {
   });
 } else {
   const { createServer } = await import('vite');
-  const isHmrDisabled = process.env.DISABLE_HMR === 'true';
   const vite = await createServer({
     server: {
       middlewareMode: true,
-      hmr: isHmrDisabled ? false : { server: httpServer },
+      hmr: false, // HMR is disabled in AI Studio per environment constraints
     },
     appType: 'spa',
   });
