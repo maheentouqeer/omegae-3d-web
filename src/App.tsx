@@ -571,6 +571,7 @@ export default function App() {
         onClose={() => setIsAiOpen(false)}
         onAddToCart={handleAddToCart}
         onFlyToProduct={handleFlyToProduct}
+        onRestockSlot={handleRestockSlot}
       />
 
       {/* Cart Toast Notification with Undo */}

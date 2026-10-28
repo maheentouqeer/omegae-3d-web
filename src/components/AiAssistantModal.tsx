@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Sparkles, Send, Loader2, Plus, Eye, Check } from 'lucide-react';
+import { X, Sparkles, Send, Loader2, Plus, Eye, Check, RefreshCw } from 'lucide-react';
 import { Product, ShelfSlot, AppMode } from '../types';
 
 interface AiAssistantModalProps {
@@ -10,6 +10,7 @@ interface AiAssistantModalProps {
   onClose: () => void;
   onAddToCart: (product: Product, quantity: number, slotId: string) => void;
   onFlyToProduct: (productId: string) => void;
+  onRestockSlot?: (slotId: string, amount: number) => void;
 }
 
 export const AiAssistantModal: React.FC<AiAssistantModalProps> = ({
@@ -20,6 +21,7 @@ export const AiAssistantModal: React.FC<AiAssistantModalProps> = ({
   onClose,
   onAddToCart,
   onFlyToProduct,
+  onRestockSlot,
 }) => {
   if (!isOpen) return null;
 
@@ -27,6 +29,7 @@ export const AiAssistantModal: React.FC<AiAssistantModalProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [responseMessage, setResponseMessage] = useState<string | null>(null);
   const [recommendedProducts, setRecommendedProducts] = useState<Product[]>([]);
+  const [pricingSuggestions, setPricingSuggestions] = useState<Array<{ productId: string; suggestedAction: string; reason: string }>>([]);
   const [addedIds, setAddedIds] = useState<Set<string>>(new Set());
 
   const shopperPresets = [
@@ -37,9 +40,10 @@ export const AiAssistantModal: React.FC<AiAssistantModalProps> = ({
   ];
 
   const managerPresets = [
-    'Generate urgent restock replenishment list',
-    'Evaluate slow-moving inventory markdown ideas',
-    'Analyze shelf capacity bottlenecks across 8 aisles',
+    'Which products are below reorder threshold?',
+    'What is the stock of Sourdough Bread and Croissants?',
+    'Analyze Aisle 2 Cold Drinks inventory health',
+    'Show slow-moving items for promotional discount',
   ];
 
   const handleSend = async (queryText?: string) => {
@@ -49,6 +53,7 @@ export const AiAssistantModal: React.FC<AiAssistantModalProps> = ({
     setIsLoading(true);
     setResponseMessage(null);
     setRecommendedProducts([]);
+    setPricingSuggestions([]);
 
     try {
       if (appMode === 'shopper') {
@@ -68,15 +73,24 @@ export const AiAssistantModal: React.FC<AiAssistantModalProps> = ({
           setRecommendedProducts(recs);
         }
       } else {
-        // Manager Mode
+        // Manager Mode - Pass rich live inventory & sales metrics
         const inventorySummary = shelfSlots.map((s) => {
           const prod = products.find((p) => p.id === s.productId);
           return {
             slotId: s.id,
+            productId: prod?.id,
             productName: prod?.name,
+            sku: prod?.sku,
+            brand: prod?.brandName,
+            category: prod?.category,
+            price: prod?.price,
+            isSale: prod?.isSale,
+            salePrice: prod?.salePrice,
             aisle: s.aisleNumber,
             stock: s.currentStock,
             max: s.maxCapacity,
+            reorderThreshold: s.reorderThreshold,
+            salesCount: s.salesCount,
             isLowStock: s.currentStock <= s.reorderThreshold,
           };
         });
@@ -90,12 +104,25 @@ export const AiAssistantModal: React.FC<AiAssistantModalProps> = ({
           }),
         });
         const data = await res.json();
-        setResponseMessage(data.analysis || 'Analysis complete for your store floor.');
+        setResponseMessage(data.analysis || data.reply || 'Analysis complete for your store floor.');
 
+        const relevantIds: string[] = [];
         if (Array.isArray(data.priorityRestockIds)) {
-          const recs = products.filter((p) => data.priorityRestockIds.includes(p.id));
-          setRecommendedProducts(recs);
+          relevantIds.push(...data.priorityRestockIds);
         }
+        if (Array.isArray(data.recommendedProductIds)) {
+          relevantIds.push(...data.recommendedProductIds);
+        }
+        if (Array.isArray(data.pricingSuggestions)) {
+          setPricingSuggestions(data.pricingSuggestions);
+          data.pricingSuggestions.forEach((ps: any) => {
+            if (ps.productId && !relevantIds.includes(ps.productId)) {
+              relevantIds.push(ps.productId);
+            }
+          });
+        }
+        const recs = products.filter((p) => relevantIds.includes(p.id));
+        setRecommendedProducts(recs);
       }
     } catch (err: any) {
       console.error(err);
@@ -106,9 +133,16 @@ export const AiAssistantModal: React.FC<AiAssistantModalProps> = ({
     }
   };
 
-  const handleAddRec = (p: Product) => {
+  const handleActionClick = (p: Product) => {
     const slot = shelfSlots.find((s) => s.productId === p.id);
-    if (slot) {
+    if (!slot) return;
+
+    if (appMode === 'manager') {
+      if (onRestockSlot) {
+        onRestockSlot(slot.id, 10);
+        setAddedIds((prev) => new Set(prev).add(p.id));
+      }
+    } else {
       onAddToCart(p, 1, slot.id);
       setAddedIds((prev) => new Set(prev).add(p.id));
     }
@@ -175,11 +209,36 @@ export const AiAssistantModal: React.FC<AiAssistantModalProps> = ({
                 {responseMessage}
               </div>
 
-              {/* Recommended Products Bundle */}
+              {/* Pricing & Merchandising Suggestions */}
+              {pricingSuggestions.length > 0 && (
+                <div className="space-y-2 pt-1">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                    <span>Actionable Merchandising Suggestions</span>
+                  </h4>
+                  <div className="space-y-2">
+                    {pricingSuggestions.map((ps, idx) => (
+                      <div
+                        key={idx}
+                        className="bg-amber-950/30 border border-amber-500/30 rounded-lg p-3 text-xs space-y-1 shadow-sm"
+                      >
+                        <div className="font-semibold text-amber-200">
+                          {ps.suggestedAction}
+                        </div>
+                        <div className="text-[11px] text-slate-300">
+                          {ps.reason}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Recommended / Relevant Products Bundle */}
               {recommendedProducts.length > 0 && (
                 <div className="space-y-2 pt-1">
                   <h4 className="text-xs font-bold uppercase tracking-wider text-slate-300">
-                    Recommended Store Items
+                    {appMode === 'manager' ? 'Key Inventory & Action Items' : 'Recommended Store Items'}
                   </h4>
                   <div className="space-y-2">
                     {recommendedProducts.map((p) => {
@@ -218,17 +277,24 @@ export const AiAssistantModal: React.FC<AiAssistantModalProps> = ({
 
                             <button
                               disabled={isAdded}
-                              onClick={() => handleAddRec(p)}
+                              onClick={() => handleActionClick(p)}
                               className={`flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs font-semibold transition-all ${
                                 isAdded
                                   ? 'bg-emerald-600/30 text-emerald-300'
+                                  : appMode === 'manager'
+                                  ? 'bg-amber-600 hover:bg-amber-500 text-white shadow-sm'
                                   : 'bg-blue-600 hover:bg-blue-500 text-white shadow-sm'
                               }`}
                             >
                               {isAdded ? (
                                 <>
                                   <Check className="w-3 h-3" />
-                                  <span>Added</span>
+                                  <span>{appMode === 'manager' ? 'Restocked' : 'Added'}</span>
+                                </>
+                              ) : appMode === 'manager' ? (
+                                <>
+                                  <RefreshCw className="w-3 h-3" />
+                                  <span>Restock +10</span>
                                 </>
                               ) : (
                                 <>
